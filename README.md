@@ -1,6 +1,6 @@
 # kimi-td-memory
 
-Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/leezhixing/kimi-td-memory) 集成插件。
+Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/TencentCloud/TencentDB-Agent-Memory) 集成插件。
 
 通过本插件，Kimi 可以在对话过程中自动保存上下文，并在后续会话中召回过往记忆、搜索原始对话，实现跨会话的项目知识沉淀。
 
@@ -19,33 +19,34 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/lee
 ## 安装
 
 1. 确保已安装 Kimi Code CLI（新版 Node.js 插件体系）。
-2. 确保 Python 3.8+ 可用，并安装 MCP SDK：`pip install mcp`。
-3. 在 Kimi Code CLI 中执行：
+2. 确保 Python 3.10+ 可用，并安装 MCP SDK：`pip install mcp`。
+3. 在 Kimi Code CLI 中执行（二选一）：
 
    ```
-   /plugins install E:/project/plugins/kimi-td-memory
+   /plugins install https://github.com/qiaoyuanjun/kimi-td-memory
+   /plugins install E:/project/plugins/kimi-td-memory(本地源码位置)
    /reload
    ```
 
-   安装后 CLI 会把插件复制到 `~/.kimi-code/plugins/managed/kimi-td-memory/`，并始终运行该副本。**修改本目录源码后必须重新执行 `/plugins install` 才会生效。**
+   安装后 CLI 会把插件复制到 `$KIMI_CODE_HOME/plugins/managed/kimi-td-memory/`（`KIMI_CODE_HOME` 默认为 `~/.kimi-code`），并始终运行该副本。**修改源码后必须重新执行 `/plugins install` 才会生效。**
 
 4. 确保 TDAI Gateway 正在运行。默认地址为 `http://127.0.0.1:8420`，可在配置文件中修改，也可通过环境变量覆盖。
 5. 调用任意插件工具时，watcher 会自动检测并启动。
 
 ## 工具说明
 
-工具通过 MCP（server 名 `td-memory`）提供，在 Kimi Code CLI 中的调用名带 `mcp__td-memory__` 前缀：
+工具通过 MCP（server 名 `td-memory`）提供。调用名前缀取决于安装方式：经 `/plugins install` 安装时为 `mcp__plugin-kimi-td-memory_td-memory__<工具名>`；经 `mcp.json` 手动添加（如 VS Code 扩展）时为 `mcp__td-memory__<工具名>`。
 
 | 工具名 | 用途 | 主要参数 |
 |--------|------|----------|
-| `mcp__td-memory__td_recall` | 召回上层记忆（L3 画像 + L2 场景导航 + L1 提示） | `query`（必填）、`session_key` |
-| `mcp__td-memory__td_search_memories` | 搜索提炼后的原子记忆 | `query`（必填）、`limit`、`session_key` |
-| `mcp__td-memory__td_search_conversations` | 搜索原始对话记录 | `query`（必填）、`limit`、`session_key` |
-| `mcp__td-memory__td_capture` | 手动捕获一轮对话 | `user_content`（必填）、`assistant_content`（必填）、`session_key` |
-| `mcp__td-memory__td_end_session` | 结束当前会话并触发提炼 | `session_key` |
-| `mcp__td-memory__td_health` | 检查 TDAI Gateway 健康状态，并确保 watcher 在运行 | 无 |
-| `mcp__td-memory__td_status` | 显示网关与 watcher 状态，未运行则自动启动 | 无 |
-| `mcp__td-memory__td_stop_watcher` | 停止 watcher | 无 |
+| `td_recall` | 召回上层记忆（L3 画像 + L2 场景导航 + L1 提示） | `query`（必填）、`session_key` |
+| `td_search_memories` | 搜索提炼后的原子记忆 | `query`（必填）、`limit`、`session_key` |
+| `td_search_conversations` | 搜索原始对话记录 | `query`（必填）、`limit`、`session_key` |
+| `td_capture` | 手动捕获一轮对话 | `user_content`（必填）、`assistant_content`（必填）、`session_key` |
+| `td_end_session` | 结束当前会话并触发提炼 | `session_key` |
+| `td_health` | 检查 TDAI Gateway 健康状态，并确保 watcher 在运行 | 无 |
+| `td_status` | 显示网关与 watcher 状态，未运行则自动启动 | 无 |
+| `td_stop_watcher` | 停止 watcher | 无 |
 
 可在 `/plugins` 面板的 Installed 页按 `M` 管理本插件的 MCP server（启用/禁用）。
 
@@ -95,7 +96,7 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/lee
 
 ### Session Key 解析规则
 
-watcher 监听 `~/.kimi-code/sessions/<工作区目录名>/<会话ID>/agents/main/wire.jsonl`，其中工作区目录名形如 `wd_<项目目录名>_<hash>`：
+watcher 监听 `$KIMI_CODE_HOME/sessions/<工作区目录名>/<会话ID>/agents/main/wire.jsonl`（`KIMI_CODE_HOME` 默认为 `~/.kimi-code`），其中工作区目录名形如 `wd_<项目目录名>_<hash>`：
 
 1. 如果 `session_key_map` 中有匹配该目录名的关键词，使用映射值。
 2. 否则从目录名解析出项目名，使用 `<项目名>-context`。
@@ -112,11 +113,11 @@ watcher 监听 `~/.kimi-code/sessions/<工作区目录名>/<会话ID>/agents/mai
 
 ### 手动启动 / 查看状态
 
-调用 `mcp__td-memory__td_status` 即可查看当前状态，并在需要时自动拉起 watcher。
+调用 `td_status` 即可查看当前状态，并在需要时自动拉起 watcher。
 
 ### 停止 watcher
 
-调用 `mcp__td-memory__td_stop_watcher`，或执行 `python watcher.py stop`。
+调用 `td_stop_watcher`，或执行 `python watcher.py stop`。
 
 > 注意：watcher 依赖 TDAI Gateway，请先启动 Gateway。
 
@@ -144,7 +145,7 @@ kimi-td-memory/
 
 ## 依赖
 
-- Python 3.8+，以及 `mcp` 包（`pip install mcp`）
+- Python 3.10+，以及 `mcp` 包（`pip install mcp`）
 - Kimi Code CLI（新版插件体系）
 - TDAI Gateway（外部运行）
 
