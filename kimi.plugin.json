@@ -1,0 +1,20 @@
+{
+  "name": "kimi-td-memory",
+  "version": "2.0.0",
+  "description": "TencentDB-Agent-Memory (td-memory) integration for Kimi Code CLI. Provides recall/search tools via MCP and includes a watcher for automatic conversation capture.",
+  "mcpServers": {
+    "td-memory": {
+      "command": "python",
+      "args": ["./mcp_server.py"],
+      "cwd": "./"
+    }
+  },
+  "skills": "./skills/",
+  "sessionStart": {
+    "skill": "td-memory"
+  },
+  "interface": {
+    "displayName": "TD Memory",
+    "shortDescription": "Auto-capture conversations into td-memory and recall past project memories"
+  }
+}

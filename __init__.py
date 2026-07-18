@@ -1,7 +1,9 @@
 """Kimi Code CLI plugin for TencentDB-Agent-Memory (td-memory).
 
-Requires TDAI Gateway running (e.g. http://127.0.0.1:8420).
-For automatic conversation capture, run the companion watcher script.
+Requires TDAI Gateway running. Configure its URL via the TDAI_GATEWAY_URL
+environment variable or the ``gateway_url`` field in config.json. The plugin
+includes an auto-capture watcher that starts automatically when any plugin
+tool is invoked.
 """
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"

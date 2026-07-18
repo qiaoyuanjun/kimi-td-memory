@@ -1,10 +1,7 @@
 {
   "gateway_url": "http://127.0.0.1:8420",
   "gateway_api_key": "",
-  "session_key_map": {
-    "budaogu-cloud": "budaogu-context",
-    "budaogu": "budaogu-context"
-  },
+  "session_key_map": {},
   "watcher": {
     "enabled": true,
     "poll_interval": 5,
