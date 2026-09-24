@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from urllib.parse import quote
 from typing import Any
@@ -53,7 +54,15 @@ def format_recall_result(
             if idx > 0:
                 persona = persona[:idx]
                 break
-        sections.append(f"<user-persona>\n````markdown\n{persona.strip()}\n````\n</user-persona>")
+        # The stored persona may itself be wrapped in a markdown code fence;
+        # unwrap it so we don't emit doubled fences below.
+        lines = persona.strip().splitlines()
+        if lines and re.match(r"^`{3,4}\s*markdown\s*$", lines[0]):
+            lines = lines[1:]
+        while lines and (re.match(r"^`{3,4}\s*$", lines[-1]) or lines[-1].strip() == "---"):
+            lines.pop()
+        persona = "\n".join(lines).strip()
+        sections.append(f"<user-persona>\n````markdown\n{persona}\n````\n</user-persona>")
 
     entries = (scenarios or {}).get("entries") or []
     files = [e for e in entries if isinstance(e, dict) and not str(e.get("path", "")).endswith("/")]
