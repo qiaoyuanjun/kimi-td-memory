@@ -48,6 +48,34 @@ def gateway_api_key() -> str:
     return os.environ.get("TDAI_GATEWAY_API_KEY") or get_config().get("gateway_api_key") or ""
 
 
+def service_id() -> str:
+    """Return the memory instance id (x-tdai-service-id), ``default`` for local deployments."""
+    return os.environ.get("TDAI_SERVICE_ID") or get_config().get("service_id") or "default"
+
+
+def data_dir() -> str:
+    """Return the Gateway's local data dir (for resolving scene block paths)."""
+    return os.environ.get("TDAI_DATA_DIR") or get_config().get("data_dir") or ""
+
+
+def identity_fields() -> dict[str, str]:
+    """Return the v3 isolation fields (team_id/agent_id/user_id/task_id) to send.
+
+    All empty by default: the v3 data plane then falls back to the ``default``
+    bucket, which is where the official v2-to-v3 migration script places
+    pre-existing data. Configure the ``identity`` block in config.json (or the
+    corresponding ``TDAI_TEAM_ID``/... env vars) to opt into real isolation.
+    """
+    cfg = get_config()
+    identity = cfg.get("identity", {})
+    fields: dict[str, str] = {}
+    for key in ("team_id", "agent_id", "user_id", "task_id"):
+        value = os.environ.get(f"TDAI_{key.upper()}") or identity.get(key) or ""
+        if value:
+            fields[key] = value
+    return fields
+
+
 def get_watcher_state_dir() -> Path:
     """Return watcher state directory from config or default."""
     cfg = get_config()

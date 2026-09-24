@@ -27,7 +27,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from client import capture, end_session, health
+from client import conversation_add, health
 from config import gateway_url, get_config, get_watcher_state_dir
 from session import find_project_root, resolve_session_key
 from text import extract_text, is_system_noise, strip_system_reminders
@@ -58,7 +58,7 @@ class WatcherState:
                     return json.load(f)
             except Exception:
                 pass
-        return {"files": {}, "sessions": {}}
+        return {"files": {}}
 
     def save(self) -> None:
         with open(self.state_path, "w", encoding="utf-8") as f:
@@ -66,9 +66,6 @@ class WatcherState:
 
     def get_file_state(self, path: Path) -> dict[str, Any]:
         return self.data["files"].setdefault(str(path), {"pos": 0, "seen": []})
-
-    def get_session_state(self, session_key: str) -> dict[str, Any]:
-        return self.data["sessions"].setdefault(session_key, {"last_capture": None, "ended": False})
 
     def mark_seen(self, path: Path, digest: str) -> None:
         fs = self.get_file_state(path)
@@ -83,13 +80,6 @@ class WatcherState:
     def update_pos(self, path: Path, pos: int) -> None:
         self.get_file_state(path)["pos"] = pos
 
-    def update_last_capture(self, session_key: str) -> None:
-        self.get_session_state(session_key)["last_capture"] = time.time()
-        self.get_session_state(session_key)["ended"] = False
-
-    def mark_ended(self, session_key: str) -> None:
-        self.get_session_state(session_key)["ended"] = True
-
 
 class SessionWatcher:
     def __init__(self, logger: logging.Logger | None = None):
@@ -101,7 +91,6 @@ class SessionWatcher:
         self.log_path = state_dir / "watcher.log"
         self.logger = logger or setup_logging(self.log_path)
         self.poll_interval = int(self.cfg.get("watcher", {}).get("poll_interval", 5))
-        self.idle_timeout = int(self.cfg.get("watcher", {}).get("idle_timeout", 300))
         # How long an unfinished assistant turn may sit idle before it is
         # flushed and captured anyway (handles the final turn of a session).
         self.flush_delay = int(self.cfg.get("watcher", {}).get("flush_delay", 30))
@@ -293,31 +282,16 @@ class SessionWatcher:
         session_key = self.resolve_session_key_for_file(path)
         for user_text, assistant_text in pairs:
             try:
-                result = capture(session_key, user_text, assistant_text)
-                self.logger.info(f"captured: session={session_key} l0_recorded={result.get('l0_recorded', 0)}")
-                self.state.update_last_capture(session_key)
+                result = conversation_add(session_key, user_text, assistant_text)
+                self.logger.info(f"captured: session={session_key} accepted={result.get('total_count', 0)}")
             except Exception as e:
                 self.logger.error(f"capture failed: {e}")
 
     def process_file(self, path: Path) -> None:
         self._capture_pairs(path, self.read_new_pairs(path))
 
-    def check_idle_sessions(self) -> None:
-        now = time.time()
-        for session_key, sess in list(self.state.data["sessions"].items()):
-            if sess.get("ended"):
-                continue
-            last = sess.get("last_capture")
-            if last and (now - last) > self.idle_timeout:
-                try:
-                    end_session(session_key)
-                    self.logger.info(f"ended idle session: {session_key}")
-                    self.state.mark_ended(session_key)
-                except Exception as e:
-                    self.logger.error(f"end_session failed: {e}")
-
     def run(self) -> None:
-        self.logger.info(f"started. gateway={gateway_url()} poll={self.poll_interval}s idle={self.idle_timeout}s")
+        self.logger.info(f"started. gateway={gateway_url()} poll={self.poll_interval}s")
         self.logger.info(f"watching: {self.session_dir}")
         self.write_pid()
 
@@ -328,7 +302,6 @@ class SessionWatcher:
                         self.process_file(path)
                     for path, user_text, assistant_text in self.flush_stale_turns():
                         self._capture_pairs(path, [(user_text, assistant_text)])
-                    self.check_idle_sessions()
                     self.state.save()
                 except Exception as e:
                     self.logger.error(f"loop error: {e}")

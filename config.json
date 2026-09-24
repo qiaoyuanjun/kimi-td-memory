@@ -1,11 +1,18 @@
 {
   "gateway_url": "http://127.0.0.1:8420",
   "gateway_api_key": "",
+  "service_id": "default",
+  "data_dir": "",
+  "identity": {
+    "team_id": "",
+    "agent_id": "",
+    "user_id": "",
+    "task_id": ""
+  },
   "session_key_map": {},
   "watcher": {
     "enabled": true,
     "poll_interval": 5,
-    "idle_timeout": 300,
     "state_dir": "~/.kimi-td-memory"
   }
 }

@@ -2,8 +2,8 @@
 """MCP stdio server for kimi-td-memory.
 
 Exposes the td-memory tools over the MCP protocol (stdio transport) so the
-Node.js Kimi Code CLI can call them. Tool logic reuses the same modules the
-old command-style tools used; only the transport changed.
+Node.js Kimi Code CLI can call them. Talks to a MemoryCore v2.0.0 Gateway
+over the v3 data plane (/v3/conversation, /v3/atomic, /v3/scenario, /v3/core).
 """
 
 from __future__ import annotations
@@ -15,9 +15,9 @@ sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
 from mcp.server.fastmcp import FastMCP
 
-from client import capture, end_session, health, recall, search_conversations, search_memories
-from config import gateway_url
-from formatting import format_recall_result, format_search_results
+from client import atomic_search, conversation_add, conversation_search, core_read, health, scenario_ls
+from config import data_dir, gateway_url, identity_fields
+from formatting import format_atomic_results, format_conversation_results, format_recall_result
 from session import resolve_session_key
 from watcher_ctl import ensure_watcher, is_watcher_running, start_watcher, stop_watcher
 
@@ -26,16 +26,25 @@ mcp = FastMCP("td-memory")
 
 @mcp.tool()
 def td_recall(query: str, session_key: str | None = None) -> str:
-    """Recall top-layer memory context from td-memory: L3 user persona, L2 scene navigation, and matching L1 memory hints. Use this first for user preferences, long-term goals, and macro project context; then drill down with td_search_memories (L1) or td_search_conversations (L0) when details are missing. Scene block paths in the scene navigation can be read directly as Markdown files.
+    """Recall top-layer memory context from td-memory: L3 user persona, L2 scene navigation, and matching L1 memory hints. Use this first for user preferences, long-term goals, and macro project context; then drill down with td_search_memories (L1) or td_search_conversations (L0) when details are missing.
 
     Args:
         query: Recall query — natural language or keywords (required).
         session_key: Optional td-memory session key. If omitted, derived from current project directory.
     """
     ensure_watcher()
-    key = session_key or resolve_session_key()
-    result = recall(key, query)
-    return format_recall_result(result)
+    identity = identity_fields()
+    core = core_read()
+    scenarios = scenario_ls()
+    memories = atomic_search(query, limit=5)
+    return format_recall_result(
+        core,
+        scenarios,
+        memories,
+        data_dir=data_dir(),
+        team_id=identity.get("team_id", "default"),
+        agent_id=identity.get("agent_id", "default"),
+    )
 
 
 @mcp.tool()
@@ -49,9 +58,8 @@ def td_search_memories(query: str, limit: int = 5, session_key: str | None = Non
     """
     ensure_watcher()
     limit = max(1, min(int(limit), 20))
-    key = session_key or resolve_session_key()
-    result = search_memories(key, query, limit)
-    return format_search_results(result)
+    result = atomic_search(query, limit)
+    return format_atomic_results(result)
 
 
 @mcp.tool()
@@ -61,13 +69,13 @@ def td_search_conversations(query: str, limit: int = 5, session_key: str | None 
     Args:
         query: Search query — natural language or keywords.
         limit: Maximum results (default: 5, max: 20).
-        session_key: Optional td-memory session key. If omitted, derived from current project directory.
+        session_key: Optional td-memory session key; restricts the search to that session. If omitted, derived from current project directory.
     """
     ensure_watcher()
     limit = max(1, min(int(limit), 20))
     key = session_key or resolve_session_key()
-    result = search_conversations(key, query, limit)
-    return format_search_results(result)
+    result = conversation_search(query, limit, session_id=key)
+    return format_conversation_results(result)
 
 
 @mcp.tool()
@@ -83,19 +91,22 @@ def td_capture(user_content: str, assistant_content: str, session_key: str | Non
     if not user_content or not assistant_content:
         raise ValueError("user_content and assistant_content are required")
     key = session_key or resolve_session_key()
-    return capture(key, user_content, assistant_content)
+    return conversation_add(key, user_content, assistant_content)
 
 
 @mcp.tool()
-def td_end_session(session_key: str | None = None) -> dict:
-    """Flush the current session and trigger L1/L2/L3 extraction immediately. Use at the end of a significant discussion or before switching topics.
+def td_end_session(session_key: str | None = None) -> str:
+    """Note: with MemoryCore v2.0.0 the server-side pipeline extracts L1/L2/L3 automatically (on capture thresholds and idle timers), so there is nothing to flush manually. This tool is kept for workflow compatibility and simply confirms the session.
 
     Args:
         session_key: Optional td-memory session key. If omitted, derived from current project directory.
     """
     ensure_watcher()
     key = session_key or resolve_session_key()
-    return end_session(key)
+    return (
+        f"Session '{key}' noted. MemoryCore v2 extracts L1/L2/L3 automatically "
+        "after captures and on idle timeouts — no manual flush is needed."
+    )
 
 
 @mcp.tool()

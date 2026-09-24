@@ -19,9 +19,9 @@ description: td-memory 长期记忆的使用指引 —— 何时召回历史记�
 
 后台 watcher 会自动把本会话的用户/助手对话写入 td-memory，**不要**主动调用 `mcp__td-memory__td_capture`（它只用于 watcher 失效时的手动补救）。
 
-## 话题收尾：触发提炼
+## 话题收尾：提炼已自动化
 
-当一个重要讨论告一段落、准备切换话题，或用户明确要求"记住"时，调用 `mcp__td-memory__td_end_session` 立即触发 L1/L2/L3 提炼。空闲超时也会自动触发，此调用只是让提炼更及时。
+服务端（MemoryCore v2）会在捕获达到阈值或会话空闲时自动完成 L1/L2/L3 提炼，**无需**手动触发。`mcp__td-memory__td_end_session` 仅作为确认标记保留，通常不用调用。
 
 ## 排障
 

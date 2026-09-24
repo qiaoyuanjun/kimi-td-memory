@@ -4,6 +4,8 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 
 通过本插件，Kimi 可以在对话过程中自动保存上下文，并在后续会话中召回过往记忆、搜索原始对话，实现跨会话的项目知识沉淀。
 
+> 本版本（3.x）对接 **MemoryCore v2.0.0** 的 v3 数据面 API（`/v3/conversation`、`/v3/atomic`、`/v3/scenario`、`/v3/core`）。如需对接旧版 v1 Gateway（`/capture`、`/recall` 接口），请使用插件 2.x 版本（main 分支）。
+
 ## 功能
 
 - **自动捕获对话**：插件目录内置 watcher，自动将用户/助手对话写入 td-memory。
@@ -12,7 +14,6 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 - **搜索 L1 原子记忆**（`td_search_memories`）：召回已提炼的关键事实、决策和项目上下文。
 - **搜索 L0 原始对话**（`td_search_conversations`）：查找完整的历史对话原文。
 - **手动捕获**（`td_capture`）：在需要时手动写入单轮对话。
-- **结束会话**（`td_end_session`）：立即触发 L1/L2/L3 提炼。
 - **健康检查**（`td_health`）：检测 TDAI Gateway 是否可达。
 - **状态查看**（`td_status`）：显示网关地址与 watcher 进程状态。
 
@@ -30,7 +31,7 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 
    安装后 CLI 会把插件复制到 `$KIMI_CODE_HOME/plugins/managed/kimi-td-memory/`（`KIMI_CODE_HOME` 默认为 `~/.kimi-code`），并始终运行该副本。**修改源码后必须重新执行 `/plugins install` 才会生效。**
 
-4. 确保 TDAI Gateway 正在运行。默认地址为 `http://127.0.0.1:8420`，可在配置文件中修改，也可通过环境变量覆盖。
+4. 确保 MemoryCore Gateway 正在运行（v2.0.0，Standalone 模式即可）。默认地址为 `http://127.0.0.1:8420`，可在配置文件中修改，也可通过环境变量覆盖。
 5. 调用任意插件工具时，watcher 会自动检测并启动。
 
 ## 工具说明
@@ -39,11 +40,11 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 
 | 工具名 | 用途 | 主要参数 |
 |--------|------|----------|
-| `td_recall` | 召回上层记忆（L3 画像 + L2 场景导航 + L1 提示） | `query`（必填）、`session_key` |
-| `td_search_memories` | 搜索提炼后的原子记忆 | `query`（必填）、`limit`、`session_key` |
-| `td_search_conversations` | 搜索原始对话记录 | `query`（必填）、`limit`、`session_key` |
-| `td_capture` | 手动捕获一轮对话 | `user_content`（必填）、`assistant_content`（必填）、`session_key` |
-| `td_end_session` | 结束当前会话并触发提炼 | `session_key` |
+| `td_recall` | 召回上层记忆（L3 画像 + L2 场景导航 + L1 提示），由插件组合 `/v3/core/read`、`/v3/scenario/ls`、`/v3/atomic/search` 生成 | `query`（必填）、`session_key` |
+| `td_search_memories` | 搜索提炼后的原子记忆（`/v3/atomic/search`） | `query`（必填）、`limit`、`session_key` |
+| `td_search_conversations` | 搜索原始对话记录（`/v3/conversation/search`） | `query`（必填）、`limit`、`session_key` |
+| `td_capture` | 手动捕获一轮对话（`/v3/conversation/add`） | `user_content`（必填）、`assistant_content`（必填）、`session_key` |
+| `td_end_session` | 兼容性保留：v2 服务端自动提炼 L1/L2/L3，无需手动触发，调用仅返回确认信息 | `session_key` |
 | `td_health` | 检查 TDAI Gateway 健康状态，并确保 watcher 在运行 | 无 |
 | `td_status` | 显示网关与 watcher 状态，未运行则自动启动 | 无 |
 | `td_stop_watcher` | 停止 watcher | 无 |
@@ -63,6 +64,9 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 |----------|--------------|
 | `TDAI_GATEWAY_URL` | `gateway_url` |
 | `TDAI_GATEWAY_API_KEY` | `gateway_api_key` |
+| `TDAI_SERVICE_ID` | `service_id` |
+| `TDAI_DATA_DIR` | `data_dir` |
+| `TDAI_TEAM_ID` / `TDAI_AGENT_ID` / `TDAI_USER_ID` / `TDAI_TASK_ID` | `identity.*` |
 | `KIMI_CODE_HOME` | Kimi Code 数据目录（默认 `~/.kimi-code`），watcher 据此定位会话文件 |
 
 ### config.json
@@ -71,6 +75,14 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 {
   "gateway_url": "http://127.0.0.1:8420",
   "gateway_api_key": "",
+  "service_id": "default",
+  "data_dir": "",
+  "identity": {
+    "team_id": "",
+    "agent_id": "",
+    "user_id": "",
+    "task_id": ""
+  },
   "session_key_map": {
     "budaogu-cloud": "budaogu-context",
     "budaogu": "budaogu-context"
@@ -78,21 +90,22 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
   "watcher": {
     "enabled": true,
     "poll_interval": 5,
-    "idle_timeout": 300,
-    "flush_delay": 30,
     "state_dir": "~/.kimi-td-memory"
   }
 }
 ```
 
-> `session_key_map` 示例：当会话所属工作区目录名包含 `budaogu-cloud` 时使用 `budaogu-context` 作为 session_key；若多个规则同时匹配，取匹配长度最长的规则。
+> `session_key_map` 示例：当会话所属工作区目录名包含 `budaogu-cloud` 时使用 `budaogu-context` 作为 session_id；若多个规则同时匹配，取匹配长度最长的规则。
 
 | 字段 | 说明 |
 |------|------|
 | `gateway_url` | TDAI Gateway 地址。 |
-| `gateway_api_key` | 网关 API 密钥（如网关无需认证可留空）。也可通过 `TDAI_GATEWAY_API_KEY` 环境变量设置。 |
-| `session_key_map` | 工作区目录名关键词到 `session_key` 的映射，优先级最高。 |
-| `watcher` | watcher 配置：`enabled` 是否启用、`poll_interval` 轮询间隔（秒）、`idle_timeout` 空闲超时（秒）、`flush_delay` 未完成回合的兜底 flush 延迟（秒）、`state_dir` 状态目录。 |
+| `gateway_api_key` | 网关 API 密钥（Gateway 设置了 `TDAI_GATEWAY_API_KEY` 时必填，否则留空）。也可通过环境变量设置。 |
+| `service_id` | Memory 实例 ID（`x-tdai-service-id`），本地部署固定为 `default`。 |
+| `data_dir` | Gateway 的本地数据目录（如 `E:/project/budaogu/ai-latest-report/memory/tdai-data`）。配置后 `td_recall` 场景导航中的路径会解析为可直接读取的本地 Markdown 绝对路径。 |
+| `identity` | v3 隔离字段（team/agent/user/task）。**默认全部留空**：数据面回落到 `default` 桶——官方 v2→v3 迁移脚本也是把存量数据放进该桶，留空即可继续读写历史记忆。需要真正的多租户隔离时再填。 |
+| `session_key_map` | 工作区目录名关键词到 `session_id` 的映射，优先级最高。 |
+| `watcher` | watcher 配置：`enabled` 是否启用、`poll_interval` 轮询间隔（秒）、`state_dir` 状态目录。 |
 
 ### Session Key 解析规则
 
@@ -101,7 +114,7 @@ watcher 监听 `$KIMI_CODE_HOME/sessions/<工作区目录名>/<会话ID>/agents/
 1. 如果 `session_key_map` 中有匹配该目录名的关键词，使用映射值。
 2. 否则从目录名解析出项目名，使用 `<项目名>-context`。
 
-手动调用工具时也可通过 `session_key` 参数显式指定；工具内缺省值则按当前项目目录解析（`<项目目录名>-context`）。
+session_id 在 v3 中是 L0 对话的分组维度（服务端按它驱动 L1 提炼流水线）；跨会话记忆共享由 identity（team/agent）维度承载。手动调用工具时也可通过 `session_key` 参数显式指定；工具内缺省值则按当前项目目录解析（`<项目目录名>-context`）。
 
 ## 启动 watcher
 
@@ -121,6 +134,13 @@ watcher 监听 `$KIMI_CODE_HOME/sessions/<工作区目录名>/<会话ID>/agents/
 
 > 注意：watcher 依赖 TDAI Gateway，请先启动 Gateway。
 
+## 从插件 2.x（v1 Gateway）升级
+
+1. 服务端升级到 MemoryCore v2.0.0（Standalone 源码运行或 Docker 均可），存量数据用官方脚本 `MemoryCore/scripts/migrate-v2-to-v3/v2-to-v3-migrate.py` 迁移（先 `--dry-run` 检查；迁移会把旧数据放入 `default` team/agent 桶，本插件默认 identity 留空正好与其对齐）。
+2. 重新 `/plugins install` 本插件并 `/reload`。
+3. 如服务端设置了 `TDAI_GATEWAY_API_KEY`，在用户级配置 `~/.kimi-td-memory/config.json` 中填入 `gateway_api_key`。
+4. 建议配置 `data_dir` 指向 Gateway 数据目录，让场景导航路径可直接读取。
+
 ## 项目结构
 
 ```
@@ -131,8 +151,8 @@ kimi-td-memory/
 ├── __init__.py
 ├── common.py            # 向后兼容的聚合导出（新代码建议直接导入子模块）
 ├── config.py            # 配置加载与环境变量
-├── client.py            # TDAI Gateway HTTP 客户端
-├── session.py           # session_key 解析
+├── client.py            # TDAI Gateway HTTP 客户端（v3 数据面）
+├── session.py           # session_id 解析
 ├── watcher_ctl.py       # watcher 生命周期管理
 ├── text.py              # 文本提取与过滤
 ├── formatting.py        # 结果格式化
@@ -147,7 +167,7 @@ kimi-td-memory/
 
 - Python 3.10+，以及 `mcp` 包（`pip install mcp`）
 - Kimi Code CLI（新版插件体系）
-- TDAI Gateway（外部运行）
+- MemoryCore Gateway v2.0.0（外部运行，Standalone 模式即可）
 
 ## 许可证
 
