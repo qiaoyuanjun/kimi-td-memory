@@ -27,7 +27,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from client import conversation_add, health
+from client import conversation_add, health, skill_conversation_add
 from config import gateway_url, get_config, get_watcher_state_dir
 from session import find_project_root, resolve_session_key
 from text import extract_text, is_system_noise, strip_system_reminders
@@ -286,6 +286,12 @@ class SessionWatcher:
                 self.logger.info(f"captured: session={session_key} accepted={result.get('total_count', 0)}")
             except Exception as e:
                 self.logger.error(f"capture failed: {e}")
+            # Best-effort dual ingest into the skill extraction pipeline
+            # (no-op when skill_identity is not provisioned).
+            try:
+                skill_conversation_add(session_key, user_text, assistant_text)
+            except Exception as e:
+                self.logger.error(f"skill ingest failed: {e}")
 
     def process_file(self, path: Path) -> None:
         self._capture_pairs(path, self.read_new_pairs(path))

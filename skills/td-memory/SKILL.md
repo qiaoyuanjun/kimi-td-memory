@@ -14,6 +14,7 @@ description: td-memory 长期记忆的使用指引 —— 何时召回历史记�
 - 查询词用任务关键词或自然语言即可，`session_key` 留空会自动按当前项目解析。
 - 返回的场景导航中列出的 scene block 路径是 Markdown 文件，需要该场景的完整细节时直接用 Read 读取。
 - 若上层记忆不够，再用 `mcp__td-memory__td_search_memories` 搜 L1 原子记忆；还不够则用 `mcp__td-memory__td_search_conversations` 查 L0 原始对话原文。
+- 开始一类之前可能解决过的任务时，可以用 `mcp__td-memory__td_search_skills` 检索服务端沉淀的可复用 SOP（Skill），命中后用 `mcp__td-memory__td_get_skill` 取全文按步骤执行。
 
 ## 对话捕获：全自动，无需干预
 

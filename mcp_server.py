@@ -15,9 +15,24 @@ sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
 from mcp.server.fastmcp import FastMCP
 
-from client import atomic_search, conversation_add, conversation_search, core_read, health, scenario_ls
-from config import data_dir, gateway_url, identity_fields
-from formatting import format_atomic_results, format_conversation_results, format_recall_result
+from client import (
+    atomic_search,
+    conversation_add,
+    conversation_search,
+    core_read,
+    health,
+    scenario_ls,
+    skill_get_by_name,
+    skill_search,
+)
+from config import data_dir, gateway_url, identity_fields, skill_identity_fields
+from formatting import (
+    format_atomic_results,
+    format_conversation_results,
+    format_recall_result,
+    format_skill_detail,
+    format_skill_results,
+)
 from session import resolve_session_key
 from watcher_ctl import ensure_watcher, is_watcher_running, start_watcher, stop_watcher
 
@@ -107,6 +122,49 @@ def td_end_session(session_key: str | None = None) -> str:
         f"Session '{key}' noted. MemoryCore v2 extracts L1/L2/L3 automatically "
         "after captures and on idle timeouts — no manual flush is needed."
     )
+
+
+@mcp.tool()
+def td_search_skills(query: str, limit: int = 5) -> str:
+    """Search skills in td-memory: reusable SOPs the server distilled from past work sessions (trigger boundaries, execution steps, verification rules). Use this before tackling a task type you may have solved before; fetch the full SOP with td_get_skill.
+
+    Args:
+        query: Search query — natural language or keywords.
+        limit: Maximum results (default: 5, max: 20).
+    """
+    ensure_watcher()
+    if not skill_identity_fields().get("team_id"):
+        return (
+            "Skill identity is not provisioned yet. Ask the user to run "
+            "`python scripts/bootstrap_skill.py` in the plugin directory first "
+            "(skill creation requires a metadata team/agent; chat memory is unaffected)."
+        )
+    limit = max(1, min(int(limit), 20))
+    try:
+        result = skill_search(query, limit)
+    except RuntimeError as e:
+        return f"Skill search unavailable: {e}"
+    return format_skill_results(result)
+
+
+@mcp.tool()
+def td_get_skill(name: str) -> str:
+    """Get the full content (SOP steps, verification rules) of a skill by its name, as listed by td_search_skills.
+
+    Args:
+        name: Skill name (required).
+    """
+    ensure_watcher()
+    if not skill_identity_fields().get("team_id"):
+        return (
+            "Skill identity is not provisioned yet. Ask the user to run "
+            "`python scripts/bootstrap_skill.py` in the plugin directory first."
+        )
+    try:
+        result = skill_get_by_name(name)
+    except RuntimeError as e:
+        return f"Skill '{name}' not found: {e}"
+    return format_skill_detail(result)
 
 
 @mcp.tool()

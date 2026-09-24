@@ -6,7 +6,7 @@ import json
 from typing import Any
 from urllib import request, error
 
-from config import gateway_url, gateway_api_key, service_id, identity_fields
+from config import gateway_url, gateway_api_key, service_id, identity_fields, skill_identity_fields
 
 
 def tdai_call(method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -93,3 +93,68 @@ def core_read() -> dict[str, Any]:
     payload: dict[str, Any] = {}
     payload.update(identity_fields())
     return tdai_call("POST", "/v3/core/read", payload)
+
+
+def skill_search(query: str, top_k: int = 5) -> dict[str, Any]:
+    """Search skills (reusable SOPs distilled from past sessions).
+
+    Requires the Gateway's skill module to be enabled (``skill.enabled: true``
+    or ``TDAI_SKILL_ENABLED=true``) and ``skill_identity`` to be provisioned
+    (``scripts/bootstrap_skill.py``).
+    """
+    payload: dict[str, Any] = {"query": query, "top_k": top_k}
+    payload.update(skill_identity_fields())
+    return tdai_call("POST", "/v3/skill/search", payload)
+
+
+def skill_list(name_prefix: str | None = None, limit: int = 100) -> dict[str, Any]:
+    """List skills, optionally filtered by name prefix."""
+    payload: dict[str, Any] = {"pagination": {"limit": limit, "offset": 0}}
+    if name_prefix:
+        payload["filters"] = {"name_prefix": name_prefix}
+    payload.update(skill_identity_fields())
+    return tdai_call("POST", "/v3/skill/list", payload)
+
+
+def skill_get(skill_id: str) -> dict[str, Any]:
+    """Fetch a skill's full content by skill_id."""
+    payload: dict[str, Any] = {
+        "skill_id": skill_id,
+        "include_content": True,
+        "include_manifest": False,
+    }
+    payload.update(skill_identity_fields())
+    return tdai_call("POST", "/v3/skill/get", payload)
+
+
+def skill_get_by_name(skill_name: str) -> dict[str, Any]:
+    """Fetch a skill's full content by name (v2.0.0 has no get-by-name route,
+    so resolve name → skill_id via list, then fetch by id)."""
+    result = skill_list(name_prefix=skill_name)
+    items = [s for s in (result.get("items") or []) if s.get("name") == skill_name]
+    if not items:
+        raise RuntimeError(f"skill '{skill_name}' not found")
+    if len(items) > 1:
+        ids = [s.get("skill_id") for s in items]
+        raise RuntimeError(f"multiple skills named '{skill_name}': {ids}")
+    return skill_get(items[0]["skill_id"])
+
+
+def skill_conversation_add(session_id: str, user_content: str, assistant_content: str) -> dict[str, Any] | None:
+    """Feed one turn to the skill extraction pipeline (best-effort dual ingest).
+
+    Returns the response, or None when skill_identity is not provisioned.
+    Raises on gateway errors — caller (watcher) is expected to catch.
+    """
+    identity = skill_identity_fields()
+    if not identity.get("team_id") or not identity.get("agent_id") or not identity.get("user_id"):
+        return None
+    payload: dict[str, Any] = {
+        "session_id": session_id,
+        "messages": [
+            {"role": "user", "content": user_content},
+            {"role": "assistant", "content": assistant_content},
+        ],
+    }
+    payload.update(identity)
+    return tdai_call("POST", "/v3/skill/conversation/add", payload)

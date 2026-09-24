@@ -13,10 +13,30 @@ from client import (
     core_read,
     health,
     scenario_ls,
+    skill_conversation_add,
+    skill_get,
+    skill_get_by_name,
+    skill_list,
+    skill_search,
     tdai_call,
 )
-from config import gateway_api_key, gateway_url, get_config, get_watcher_pid_file, get_watcher_state_dir, identity_fields, service_id
-from formatting import format_atomic_results, format_conversation_results, format_recall_result
+from config import (
+    gateway_api_key,
+    gateway_url,
+    get_config,
+    get_watcher_pid_file,
+    get_watcher_state_dir,
+    identity_fields,
+    service_id,
+    skill_identity_fields,
+)
+from formatting import (
+    format_atomic_results,
+    format_conversation_results,
+    format_recall_result,
+    format_skill_detail,
+    format_skill_results,
+)
 from session import find_project_root, resolve_session_key
 from text import extract_text, is_system_noise, strip_system_reminders
 from watcher_ctl import ensure_watcher, is_watcher_running, start_watcher, stop_watcher
@@ -32,6 +52,8 @@ __all__ = [
     "format_atomic_results",
     "format_conversation_results",
     "format_recall_result",
+    "format_skill_detail",
+    "format_skill_results",
     "gateway_api_key",
     "gateway_url",
     "get_config",
@@ -44,6 +66,12 @@ __all__ = [
     "resolve_session_key",
     "scenario_ls",
     "service_id",
+    "skill_conversation_add",
+    "skill_get",
+    "skill_get_by_name",
+    "skill_identity_fields",
+    "skill_list",
+    "skill_search",
     "start_watcher",
     "stop_watcher",
     "strip_system_reminders",

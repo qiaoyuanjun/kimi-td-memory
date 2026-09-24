@@ -1,6 +1,6 @@
 {
   "name": "kimi-td-memory",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "TencentDB-Agent-Memory (td-memory) integration for Kimi Code CLI, targeting MemoryCore v2.0.0 (v3 data plane). Provides recall/search tools via MCP and includes a watcher for automatic conversation capture.",
   "mcpServers": {
     "td-memory": {

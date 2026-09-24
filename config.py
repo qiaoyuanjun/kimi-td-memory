@@ -76,6 +76,24 @@ def identity_fields() -> dict[str, str]:
     return fields
 
 
+def skill_identity_fields() -> dict[str, str]:
+    """Return the identity used for skill-plane calls (``skill_identity`` block).
+
+    Skills are a separate plane from chat memory: skill creation requires the
+    owning (team, agent) to exist in the v3 metadata store, so this identity
+    points at entities provisioned by ``scripts/bootstrap_skill.py`` — while
+    chat memory keeps using the default bucket. Empty when not provisioned.
+    """
+    cfg = get_config()
+    identity = cfg.get("skill_identity", {})
+    fields: dict[str, str] = {}
+    for key in ("team_id", "agent_id", "user_id"):
+        value = identity.get(key) or ""
+        if value:
+            fields[key] = value
+    return fields
+
+
 def get_watcher_state_dir() -> Path:
     """Return watcher state directory from config or default."""
     cfg = get_config()

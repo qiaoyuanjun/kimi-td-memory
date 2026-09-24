@@ -134,3 +134,29 @@ def format_conversation_results(result: dict[str, Any]) -> str:
         content = _truncate(str(m.get("content", "")), 300)
         lines.append(f"- [{role}] ({session_id}) {content}")
     return "\n".join(lines)
+
+
+def format_skill_results(result: dict[str, Any]) -> str:
+    """Format skill search results into a readable string."""
+    items = (result or {}).get("items")
+    if not isinstance(items, list):
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    if not items:
+        return "No matching skills found."
+    lines = []
+    for s in items:
+        line = f"- **{s.get('name', '?')}** (v{s.get('version', '?')})"
+        desc = s.get("description") or s.get("snippet")
+        if desc:
+            line += f": {_truncate(str(desc), 200)}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def format_skill_detail(result: dict[str, Any]) -> str:
+    """Format a full skill (with content) into a readable string."""
+    name = result.get("name", "?")
+    version = result.get("version", "?")
+    status = result.get("status", "?")
+    content = result.get("content") or "(no content)"
+    return f"# Skill: {name} (v{version}, {status})\n\n{content}"

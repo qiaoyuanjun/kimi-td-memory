@@ -10,7 +10,8 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 
 | 插件版本 | 对接服务端 | 说明 |
 |----------|-----------|------|
-| 3.x | MemoryCore v2.0.0 / v2.0.1 | v3 数据面（`/v3/*`），本分支 |
+| 3.1+ | MemoryCore v2.0.0 / v2.0.1 | v3 数据面（`/v3/*`）+ Skill 平面（`/v3/skill/*`），本分支 |
+| 3.0 | MemoryCore v2.0.0 / v2.0.1 | v3 数据面（`/v3/*`） |
 | 2.x | v1.x Gateway | v1 兼容接口（`/capture`、`/recall`），master 分支 |
 
 ## 功能
@@ -51,6 +52,8 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 | `td_search_memories` | 搜索提炼后的原子记忆（`/v3/atomic/search`） | `query`（必填）、`limit`、`session_key` |
 | `td_search_conversations` | 搜索原始对话记录（`/v3/conversation/search`） | `query`（必填）、`limit`、`session_key` |
 | `td_capture` | 手动捕获一轮对话（`/v3/conversation/add`） | `user_content`（必填）、`assistant_content`（必填）、`session_key` |
+| `td_search_skills` | 搜索服务端从对话沉淀的 Skill（可复用 SOP，含触发边界/执行步骤/验证规则） | `query`（必填）、`limit` |
+| `td_get_skill` | 按名称获取 Skill 全文 | `name`（必填） |
 | `td_end_session` | 兼容性保留：v2 服务端自动提炼 L1/L2/L3，无需手动触发，调用仅返回确认信息 | `session_key` |
 | `td_health` | 检查 TDAI Gateway 健康状态，并确保 watcher 在运行 | 无 |
 | `td_status` | 显示网关与 watcher 状态，未运行则自动启动 | 无 |
@@ -111,8 +114,36 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 | `service_id` | Memory 实例 ID（`x-tdai-service-id`），本地部署固定为 `default`。 |
 | `data_dir` | Gateway 的本地数据目录（如 `E:/project/budaogu/ai-latest-report/memory/tdai-data`）。配置后 `td_recall` 场景导航中的路径会解析为可直接读取的本地 Markdown 绝对路径。 |
 | `identity` | v3 隔离字段（team/agent/user/task）。**默认全部留空**：数据面回落到 `default` 桶——官方 v2→v3 迁移脚本也是把存量数据放进该桶，留空即可继续读写历史记忆。需要真正的多租户隔离时再填。 |
+| `skill_identity` | Skill 平面的隔离字段（team/agent/user），由 `scripts/bootstrap_skill.py` 自动写入，见下文「启用 Skill 模块」。与 `identity` 相互独立：chat 记忆继续走 default 桶，Skill 资产归属到 provision 的 team/agent（Skill 创建会向元数据面注册资产，要求 team/agent 实体存在）。 |
 | `session_key_map` | 工作区目录名关键词到 `session_id` 的映射，优先级最高。 |
 | `watcher` | watcher 配置：`enabled` 是否启用、`poll_interval` 轮询间隔（秒）、`state_dir` 状态目录。 |
+
+## 启用 Skill 模块
+
+Skill 是服务端从对话中自动沉淀的可复用 SOP。完整启用需要两步：
+
+1. **Gateway 配置启用 skill 模块**（`tdai-gateway.yaml` 增加以下配置，或设环境变量 `TDAI_SKILL_ENABLED=true`），然后重启 Gateway：
+
+   ```yaml
+   skill:
+     enabled: true
+     routing:
+       mode: "bm25"
+       searchTopK: 20
+     extraction:
+       enabled: true     # 需要有效的 llm 配置
+       maxIterations: 16
+   ```
+
+2. ** provision Skill 身份实体**：Skill 创建会向 v3 元数据面注册资产，要求 owning team/agent 存在。在插件目录执行一次（幂等，可重复跑）：
+
+   ```
+   python scripts/bootstrap_skill.py
+   ```
+
+   脚本会自动完成 init-admin → 建业务用户 → 建 team（`kimi-code`）→ 建 agent（`kimi`），并把 `skill_identity`、`admin_key`、`user_key` 写入用户级配置 `~/.kimi-td-memory/config.json`。
+
+启用后：watcher 会把每轮对话**双写**到 `/v3/skill/conversation/add`（skill 提炼流水线，best-effort）；达到服务端阈值时自动归档提炼为 Skill；`td_search_skills` / `td_get_skill` 可随时检索。
 
 ### Session Key 解析规则
 
@@ -178,12 +209,14 @@ kimi-td-memory/
 ├── __init__.py
 ├── common.py            # 向后兼容的聚合导出（新代码建议直接导入子模块）
 ├── config.py            # 配置加载与环境变量
-├── client.py            # TDAI Gateway HTTP 客户端（v3 数据面）
+├── client.py            # TDAI Gateway HTTP 客户端（v3 数据面 + skill 平面）
 ├── session.py           # session_id 解析
 ├── watcher_ctl.py       # watcher 生命周期管理
 ├── text.py              # 文本提取与过滤
 ├── formatting.py        # 结果格式化
-├── watcher.py           # 自动捕获 watcher（监听 wire.jsonl）
+├── watcher.py           # 自动捕获 watcher（监听 wire.jsonl，chat + skill 双写）
+├── scripts/
+│   └── bootstrap_skill.py  # Skill 身份 provision（init-admin → user → team → agent）
 ├── skills/
 │   └── td-memory/
 │       └── SKILL.md     # sessionStart skill：记忆召回/提炼使用指引
