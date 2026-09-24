@@ -26,6 +26,7 @@ from client import (
     skill_search,
 )
 from config import data_dir, gateway_url, identity_fields, skill_identity_fields
+from local_store import list_scene_blocks as local_list_scene_blocks, read_persona as local_read_persona
 from formatting import (
     format_atomic_results,
     format_conversation_results,
@@ -49,16 +50,23 @@ def td_recall(query: str, session_key: str | None = None) -> str:
     """
     ensure_watcher()
     identity = identity_fields()
-    core = core_read()
-    scenarios = scenario_ls()
+    team = identity.get("team_id", "default")
+    agent = identity.get("agent_id", "default")
+    # L3/L2 are plain Markdown on disk: read locally when data_dir is
+    # configured (cheaper and works even with the Gateway down); L1 still
+    # goes through the API because BM25/embedding ranking is server-side.
+    persona = local_read_persona(team, agent)
+    core = {"content": persona} if persona is not None else core_read()
+    scenes = local_list_scene_blocks(team, agent)
+    scenarios = {"entries": scenes} if scenes is not None else scenario_ls()
     memories = atomic_search(query, limit=5)
     return format_recall_result(
         core,
         scenarios,
         memories,
         data_dir=data_dir(),
-        team_id=identity.get("team_id", "default"),
-        agent_id=identity.get("agent_id", "default"),
+        team_id=team,
+        agent_id=agent,
     )
 
 

@@ -48,7 +48,7 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 
 | 工具名 | 用途 | 主要参数 |
 |--------|------|----------|
-| `td_recall` | 召回上层记忆（L3 画像 + L2 场景导航 + L1 提示），由插件组合 `/v3/core/read`、`/v3/scenario/ls`、`/v3/atomic/search` 生成 | `query`（必填）、`session_key` |
+| `td_recall` | 召回上层记忆（L3 画像 + L2 场景导航 + L1 提示）。L3/L2 **本地直读** `data_dir` 下的 Markdown 文件（配置了 `data_dir` 时，Gateway 不在线也能召回），L1 经 `/v3/atomic/search` 检索 | `query`（必填）、`session_key` |
 | `td_search_memories` | 搜索提炼后的原子记忆（`/v3/atomic/search`） | `query`（必填）、`limit`、`session_key` |
 | `td_search_conversations` | 搜索原始对话记录（`/v3/conversation/search`） | `query`（必填）、`limit`、`session_key` |
 | `td_capture` | 手动捕获一轮对话（`/v3/conversation/add`） | `user_content`（必填）、`assistant_content`（必填）、`session_key` |
@@ -112,7 +112,7 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 | `gateway_url` | TDAI Gateway 地址。 |
 | `gateway_api_key` | 网关 API 密钥（Gateway 设置了 `TDAI_GATEWAY_API_KEY` 时必填，否则留空）。也可通过环境变量设置。 |
 | `service_id` | Memory 实例 ID（`x-tdai-service-id`），本地部署固定为 `default`。 |
-| `data_dir` | Gateway 的本地数据目录（如 `E:/project/budaogu/ai-latest-report/memory/tdai-data`）。配置后 `td_recall` 场景导航中的路径会解析为可直接读取的本地 Markdown 绝对路径。 |
+| `data_dir` | Gateway 的本地数据目录（如 `E:/project/budaogu/ai-latest-report/memory/tdai-data`）。配置后 `td_recall` 的 L3 画像与 L2 场景导航**直接从本地 Markdown 文件读取**（不再走 HTTP，Gateway 离线也能召回），场景路径也可直接 Read。 |
 | `identity` | v3 隔离字段（team/agent/user/task）。**默认全部留空**：数据面回落到 `default` 桶——官方 v2→v3 迁移脚本也是把存量数据放进该桶，留空即可继续读写历史记忆。需要真正的多租户隔离时再填。 |
 | `skill_identity` | Skill 平面的隔离字段（team/agent/user），由 `scripts/bootstrap_skill.py` 自动写入，见下文「启用 Skill 模块」。与 `identity` 相互独立：chat 记忆继续走 default 桶，Skill 资产归属到 provision 的 team/agent（Skill 创建会向元数据面注册资产，要求 team/agent 实体存在）。 |
 | `session_key_map` | 工作区目录名关键词到 `session_id` 的映射，优先级最高。 |
@@ -215,6 +215,7 @@ kimi-td-memory/
 ├── text.py              # 文本提取与过滤
 ├── formatting.py        # 结果格式化
 ├── watcher.py           # 自动捕获 watcher（监听 wire.jsonl，chat + skill 双写）
+├── local_store.py       # L2/L3 本地文件直读（persona.md / scene_blocks，含 META 头解析）
 ├── scripts/
 │   └── bootstrap_skill.py  # Skill 身份 provision（init-admin → user → team → agent）
 ├── skills/

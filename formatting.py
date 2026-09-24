@@ -76,6 +76,8 @@ def format_recall_result(
         ]
         for e in files:
             lines.append(f"### Path: {_resolve_scene_path(str(e.get('path')), data_dir, team_id, agent_id)}")
+            if e.get("heat") is not None:
+                lines.append(f"**热度**: {e['heat']}")
             updated = e.get("updated_at") or "-"
             lines.append(f"**更新**: {updated}")
             summary = e.get("summary")
