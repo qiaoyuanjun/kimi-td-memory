@@ -16,11 +16,12 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 
 ## 功能
 
-- **自动捕获对话**：插件目录内置 watcher，自动将用户/助手对话写入 td-memory。
+- **自动捕获对话**：插件目录内置 watcher，自动将用户/助手对话写入 td-memory（同时双写到 Skill 提炼流水线）。
 - **会话开始自动召回**：插件声明了 sessionStart skill，引导 Kimi 在接到任务时先搜索相关记忆。
-- **召回上层记忆**（`td_recall`）：一次性获取 L3 用户画像、L2 场景导航与匹配的 L1 记忆。
+- **召回上层记忆**（`td_recall`）：一次性获取 L3 用户画像、L2 场景导航与匹配的 L1 记忆；L3/L2 优先本地直读 Markdown 文件，Gateway 离线也能召回。
 - **搜索 L1 原子记忆**（`td_search_memories`）：召回已提炼的关键事实、决策和项目上下文。
 - **搜索 L0 原始对话**（`td_search_conversations`）：查找完整的历史对话原文。
+- **检索可复用 SOP**（`td_search_skills` / `td_get_skill`）：搜索服务端从对话中沉淀的 Skill（触发边界、执行步骤、验证规则）。
 - **手动捕获**（`td_capture`）：在需要时手动写入单轮对话。
 - **健康检查**（`td_health`）：检测 TDAI Gateway 是否可达。
 - **状态查看**（`td_status`）：显示网关地址与 watcher 进程状态。
@@ -29,7 +30,7 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 
 1. 确保已安装 Kimi Code CLI（新版 Node.js 插件体系）。
 2. 确保 Python 3.10+ 可用，并安装 MCP SDK：`pip install mcp`。
-3. 在 Kimi Code CLI 中执行（二选一）：
+3. 在 Kimi Code CLI 或桌面版中执行（二选一，两端共用同一份插件数据）：
 
    ```
    /plugins install https://github.com/qiaoyuanjun/kimi-td-memory
@@ -93,6 +94,11 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
     "user_id": "",
     "task_id": ""
   },
+  "skill_identity": {
+    "team_id": "",
+    "agent_id": "",
+    "user_id": ""
+  },
   "session_key_map": {
     "budaogu-cloud": "budaogu-context",
     "budaogu": "budaogu-context"
@@ -135,7 +141,7 @@ Skill 是服务端从对话中自动沉淀的可复用 SOP。完整启用需要�
        maxIterations: 16
    ```
 
-2. ** provision Skill 身份实体**：Skill 创建会向 v3 元数据面注册资产，要求 owning team/agent 存在。在插件目录执行一次（幂等，可重复跑）：
+2. **provision Skill 身份实体**：Skill 创建会向 v3 元数据面注册资产，要求 owning team/agent 存在。在插件目录执行一次（幂等，可重复跑）：
 
    ```
    python scripts/bootstrap_skill.py
@@ -198,6 +204,14 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
 **Q: 桌面版和 CLI 的插件管理有区别吗？**
 
 没有。桌面版与 CLI 共用同一套插件机制和 `$KIMI_CODE_HOME` 数据目录（含 `plugins/managed/` 与 `installed.json`），任一端安装/更新，另一端 `/reload` 后同样生效。
+
+**Q: `td_search_skills` 一直搜不到东西？**
+
+按顺序排查：1) Gateway 的 `tdai-gateway.yaml` 是否启用了 `skill` 模块（或 `TDAI_SKILL_ENABLED=true`）；2) 是否执行过 `python scripts/bootstrap_skill.py`（未 provision 时工具会直接提示）；3) skill 库本来就是空的——服务端要等对话积累达到阈值（默认 tool_call ≥10 或 ≥40KB）才会自动提炼，前期搜不到属正常。
+
+**Q: Gateway 没在运行，记忆还能召回吗？**
+
+部分能。只要配置了 `data_dir`，`td_recall` 的 L3 画像和 L2 场景导航会直接读本地 Markdown 文件；但 L1/L0 搜索、对话捕获、Skill 检索都依赖 Gateway。
 
 ## 项目结构
 
