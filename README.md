@@ -4,7 +4,14 @@ Kimi Code CLI 的 [TencentDB-Agent-Memory（td-memory）](https://github.com/Ten
 
 通过本插件，Kimi 可以在对话过程中自动保存上下文，并在后续会话中召回过往记忆、搜索原始对话，实现跨会话的项目知识沉淀。
 
-> 本版本（3.x）对接 **MemoryCore v2.0.0** 的 v3 数据面 API（`/v3/conversation`、`/v3/atomic`、`/v3/scenario`、`/v3/core`）。如需对接旧版 v1 Gateway（`/capture`、`/recall` 接口），请使用插件 2.x 版本（main 分支）。
+> 本版本（3.x）基于 **MemoryCore v2.0.0** 开发，对接其 v3 数据面 API（`/v3/conversation`、`/v3/atomic`、`/v3/scenario`、`/v3/core`）；服务端升级到官方 v2.0.1 时插件无需改动。如需对接旧版 v1 Gateway（`/capture`、`/recall` 接口），请使用插件 2.x 版本（master 分支）。
+
+## 版本对应
+
+| 插件版本 | 对接服务端 | 说明 |
+|----------|-----------|------|
+| 3.x | MemoryCore v2.0.0 / v2.0.1 | v3 数据面（`/v3/*`），本分支 |
+| 2.x | v1.x Gateway | v1 兼容接口（`/capture`、`/recall`），master 分支 |
 
 ## 功能
 
@@ -140,6 +147,26 @@ session_id 在 v3 中是 L0 对话的分组维度（服务端按它驱动 L1 提
 2. 重新 `/plugins install` 本插件并 `/reload`。
 3. 如服务端设置了 `TDAI_GATEWAY_API_KEY`，在用户级配置 `~/.kimi-td-memory/config.json` 中填入 `gateway_api_key`。
 4. 建议配置 `data_dir` 指向 Gateway 数据目录，让场景导航路径可直接读取。
+
+## 常见问题
+
+**Q: `/plugins install` 报 `EBUSY: resource busy or locked, rename ...plugins/managed/kimi-td-memory...`？**
+
+运行中的 MCP server 进程以 managed 目录为工作目录，Windows 会锁住目录导致安装器无法改名。先结束这些进程再重试安装：
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+  Where-Object { $_.CommandLine -match 'managed.kimi-td-memory' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+```
+
+**Q: 改了插件源码、重新安装并 `/reload` 后，工具行为还是旧的？**
+
+`/reload` 只会在 MCP server 未运行时启动它，**不会重启已在运行的 server 进程**。需要结束 `python mcp_server.py` 进程（下次调用工具时自动以新代码拉起），或开一个新会话。
+
+**Q: 桌面版和 CLI 的插件管理有区别吗？**
+
+没有。桌面版与 CLI 共用同一套插件机制和 `$KIMI_CODE_HOME` 数据目录（含 `plugins/managed/` 与 `installed.json`），任一端安装/更新，另一端 `/reload` 后同样生效。
 
 ## 项目结构
 
